@@ -1,340 +1,245 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-import numpy as np
-import time
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
 
-# --- 1. تنظیمات صفحه ---
+# --- تنظیمات صفحه ---
 st.set_page_config(
-    page_title="داشبورد جامع سرمایه انسانی",
-    page_icon="💼",
+    page_title="داشبورد پیش‌بینی خروج کارکنان",
+    page_icon="🧠",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- 2. استایل‌دهی حرفه‌ای (CSS) ---
-# حل مشکل فونت سفید + طراحی کارت‌های مدیریتی
+# --- استایل‌دهی راست‌چین برای فارسی ---
 st.markdown("""
 <style>
-    /* ایمپورت فونت وزیر */
-    @import url('https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css');
-    
-    * {
-        font-family: 'Vazirmatn', sans-serif !important;
-        color: #1f2937; /* رنگ متن پیش‌فرض: خاکستری تیره */
-    }
-    
-    /* اجبار پس‌زمینه روشن برای کل اپ */
-    .stApp {
-        background-color: #f3f4f6;
-    }
-    
-    /* تنظیمات RTL */
-    .main .block-container {
+    .main {
         direction: rtl;
         text-align: right;
-        padding-top: 1rem;
+        font-family: 'Tahoma', sans-serif;
     }
-    
-    /* استایل سایدبار */
-    section[data-testid="stSidebar"] {
-        background-color: #ffffff;
-        border-left: 1px solid #e5e7eb;
-    }
-    
-    section[data-testid="stSidebar"] * {
-        color: #1f2937 !important; /* متن سایدبار همیشه مشکی */
-    }
-
-    /* کارت‌های KPI (شاخص‌های کلیدی) */
-    .kpi-card {
-        background-color: #ffffff;
-        border-radius: 10px;
-        padding: 20px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        border-right: 5px solid #3b82f6; /* نوار آبی سمت راست */
+    h1, h2, h3, h4 {
         text-align: right;
-        margin-bottom: 10px;
+        font-family: 'Tahoma', sans-serif;
     }
-    .kpi-title { font-size: 0.9rem; color: #6b7280; margin-bottom: 5px; }
-    .kpi-value { font-size: 1.8rem; font-weight: bold; color: #111827; }
-    .kpi-delta { font-size: 0.8rem; color: #10b981; } /* رنگ سبز */
-    .kpi-delta.neg { color: #ef4444; } /* رنگ قرمز */
-
-    /* استایل تب‌ها */
-    .stTabs [data-baseweb="tab-list"] {
-        justify-content: flex-end;
-        border-bottom: 2px solid #e5e7eb;
+    .stMetric {
+        direction: rtl; 
+        text-align: right;
     }
-    .stTabs [data-baseweb="tab"] {
-        font-size: 1.1rem;
-        font-weight: 600;
+    /* تنظیم فونت نمودارها */
+    .js-plotly-plot .plotly .g-title {
+        font-family: 'Tahoma', sans-serif;
     }
-    
-    /* باکس هوش مصنوعی */
-    .ai-insight-box {
-        background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);
-        border: 1px solid #bfdbfe;
-        border-radius: 12px;
-        padding: 25px;
-        margin-top: 20px;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
-    }
-    
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. تولید داده‌های پیشرفته ---
+# --- 1. تولید داده‌های ساختگی (Mock Data) ---
 @st.cache_data
-def generate_executive_data():
+def generate_data():
     np.random.seed(42)
-    n = 500 # تعداد پرسنل
+    n_employees = 300
     
-    depts = ['فنی و مهندسی', 'فروش', 'مالی', 'پشتیبانی', 'R&D']
+    # داده‌های دموگرافیک
+    ids = [f"EMP-{i:03d}" for i in range(1, n_employees + 1)]
+    departments = np.random.choice(['فنی و مهندسی', 'فروش و مارکتینگ', 'منابع انسانی', 'مالی', 'پشتیبانی'], n_employees)
+    tenure = np.random.randint(1, 15, n_employees) # سابقه کار
     
+    # شاخص‌های روانشناسی صنعتی سازمانی (نمره 1 تا 10)
+    # هرچه نمره بالاتر، وضعیت بهتر (بجز فرسودگی)
+    
+    # تعهد عاطفی (علاقه به سازمان)
+    affective_commitment = np.random.normal(6, 2, n_employees).clip(1, 10)
+    
+    # عدالت سازمانی (احساس انصاف)
+    organizational_justice = np.random.normal(5.5, 2.5, n_employees).clip(1, 10)
+    
+    # کیفیت رابطه با مدیر (LMX)
+    lmx = np.random.normal(6, 2, n_employees).clip(1, 10)
+    
+    # فرسودگی شغلی (Burnout) - نمره بالا یعنی فرسودگی بیشتر (بد)
+    burnout = np.random.normal(4, 2.5, n_employees).clip(1, 10)
+    
+    # تناسب شغل و فرد (P-J Fit)
+    job_fit = np.random.normal(7, 1.5, n_employees).clip(1, 10)
+
     df = pd.DataFrame({
-        'ID': range(1001, 1001 + n),
-        'Department': np.random.choice(depts, n),
-        
-        # فیلترهای مورد نظر شما
-        'Salary': np.random.randint(13, 85, n) * 1000000, # حقوق (۱۳ تا ۸۵ میلیون)
-        'MonthlyHours': np.random.normal(176, 20, n).astype(int), # میانگین ۱۷۶ ساعت (استاندارد)
-        'Tenure': np.random.randint(1, 20, n), # سابقه کار
-        
-        # شاخص‌های کیفی
-        'Satisfaction': np.random.randint(1, 10, n),
-        'ManagerRating': np.random.randint(1, 6, n),
-        'Age': np.random.randint(23, 60, n)
+        'ID': ids,
+        'Department': departments,
+        'Tenure_Years': tenure,
+        'Commitment': affective_commitment,
+        'Justice': organizational_justice,
+        'LMX_Manager_Rel': lmx,
+        'Burnout': burnout,
+        'Job_Fit': job_fit
     })
-    
-    # اطمینان از اینکه ساعات کاری زیر ۱۰۰ یا بالای ۲۵۰ نیست (داده پرت)
-    df['MonthlyHours'] = df['MonthlyHours'].clip(120, 260)
-    
-    # --- منطق تحلیلی (Calculated Fields) ---
-    
-    # 1. محاسبه ریسک فرسودگی (Burnout Risk)
-    # اگر ساعات کاری بالا باشد (>200) و رضایت پایین باشد
-    conditions = [
-        (df['MonthlyHours'] > 200) & (df['Satisfaction'] < 5),
-        (df['MonthlyHours'] > 180) | (df['Satisfaction'] < 7),
-    ]
-    choices = ['خطرناک', 'هشدار']
-    df['BurnoutStatus'] = np.select(conditions, choices, default='نرمال')
-    
-    # 2. احتمال مهاجرت (Migration Probability)
-    # متخصصین جوان (سن < 35) با حقوق نسبتاً پایین نسبت به بازار (مثلا < 30 میلیون)
-    df['MigrationProb'] = np.where(
-        (df['Age'] < 35) & (df['Salary'] < 30000000) & (df['Department'].isin(['فنی و مهندسی', 'R&D'])),
-        np.random.randint(70, 99, n), # درصد بالا
-        np.random.randint(10, 50, n)
+
+    # ایجاد ستون هدف (احتمال خروج) بر اساس فرمول منطقی برای شبیه‌سازی واقعیت
+    # فرمول: خروج بالا = فرسودگی بالا + عدالت پایین + تعهد پایین
+    risk_score = (
+        (df['Burnout'] * 1.5) + 
+        ((11 - df['Justice']) * 1.2) + 
+        ((11 - df['Commitment']) * 1.0) +
+        ((11 - df['LMX_Manager_Rel']) * 0.8)
     )
     
-    # 3. قابلیت جایگزینی (Replaceability)
-    # سابقه بالا = سخت
-    df['Replaceability'] = np.where(df['Tenure'] > 7, 'سخت', np.where(df['Tenure'] > 3, 'متوسط', 'آسان'))
+    # نرمال‌سازی ریسک بین 0 تا 100
+    df['Risk_Score'] = ((risk_score - risk_score.min()) / (risk_score.max() - risk_score.min())) * 100
+    
+    # برچسب‌گذاری (اگر ریسک بالای 60 باشد، احتمال خروج بالاست)
+    df['Will_Leave'] = (df['Risk_Score'] > 60).astype(int)
     
     return df
 
-df_full = generate_executive_data()
+df = generate_data()
 
-# --- 4. سایدبار (پنل کنترل مدیر) ---
-with st.sidebar:
-    st.markdown("### ⚙️ فیلترهای پیشرفته")
-    st.markdown("---")
-    
-    # فیلتر دپارتمان
-    sel_dept = st.multiselect(
-        "واحد سازمانی",
-        options=df_full['Department'].unique(),
-        default=df_full['Department'].unique()
-    )
-    
-    # فیلتر 1: حداقل حقوق (درخواست کاربر)
-    st.markdown("**💰 محدوده حقوق (تومان)**")
-    min_sal, max_sal = st.slider(
-        "بازه حقوقی",
-        min_value=13000000, 
-        max_value=100000000, 
-        value=(13000000, 85000000),
-        step=1000000,
-        format="%d"
-    )
-    
-    # فیلتر 2: ساعات کاری (درخواست کاربر)
-    st.markdown("**⏰ ساعات کاری ماهانه**")
-    hours_range = st.slider(
-        "فیلتر ساعت کاری",
-        min_value=120,
-        max_value=260,
-        value=(140, 220),
-        help="استاندارد: ۱۷۶ ساعت"
-    )
-    
-    # فیلتر 3: فاکتورهای دیگر (سابقه کار)
-    st.markdown("**📅 سابقه کار (سال)**")
-    tenure_min = st.slider("حداقل سابقه", 0, 20, 0)
-    
-    st.markdown("---")
-    st.caption("v2.1.0 | داشبورد مدیریتی")
+# --- 2. مدل‌سازی هوشمند (Machine Learning) ---
+# آموزش مدل برای محاسبه اهمیت ویژگی‌ها
+X = df[['Commitment', 'Justice', 'LMX_Manager_Rel', 'Burnout', 'Job_Fit', 'Tenure_Years']]
+y = df['Will_Leave']
+model = RandomForestClassifier(n_estimators=100, random_state=42)
+model.fit(X, y)
 
-# --- اعمال فیلترها ---
-df = df_full[
-    (df_full['Department'].isin(sel_dept)) &
-    (df_full['Salary'] >= min_sal) & (df_full['Salary'] <= max_sal) &
-    (df_full['MonthlyHours'] >= hours_range[0]) & (df_full['MonthlyHours'] <= hours_range[1]) &
-    (df_full['Tenure'] >= tenure_min)
-]
+# --- 3. داشبورد ---
 
-# --- 5. بدنه اصلی داشبورد ---
+st.title("🧩 داشبورد هوشمند نگهداشت سرمایه انسانی")
+st.markdown("تحلیل شاخص‌های روانشناسی صنعتی برای پیش‌گیری از خروج نخبگان")
 
-# هدر
-c_head1, c_head2 = st.columns([3, 1])
-with c_head1:
-    st.title("سامانه تحلیل استراتژیک سرمایه انسانی")
-    st.markdown(f"**فیلتر فعال:** پرسنل با حقوق بالای {min_sal:,.0f} تومان و ساعات کاری بین {hours_range[0]} تا {hours_range[1]}")
+# --- سایدبار و فیلترها ---
+st.sidebar.header("فیلترهای نمایش")
+dept_filter = st.sidebar.multiselect(
+    "انتخاب دپارتمان:",
+    options=df['Department'].unique(),
+    default=df['Department'].unique()
+)
 
-with c_head2:
-    # دکمه دانلود (نمادین)
-    st.button("📥 دانلود گزارش اکسل", use_container_width=True)
+filtered_df = df[df['Department'].isin(dept_filter)]
 
-st.markdown("<br>", unsafe_allow_html=True)
-
-# ردیف KPI سفارشی (با HTML برای زیبایی)
+# --- بخش اول: نمای کلی و وضعیت اضطراری ---
 col1, col2, col3, col4 = st.columns(4)
 
-# محاسبات KPI
-avg_sal = df['Salary'].mean() / 1000000 if not df.empty else 0
-avg_hours = df['MonthlyHours'].mean() if not df.empty else 0
-high_risk_burnout = len(df[df['BurnoutStatus'] == 'خطرناک'])
-mig_risk_count = len(df[df['MigrationProb'] > 80])
+avg_risk = filtered_df['Risk_Score'].mean()
+high_risk_count = filtered_df[filtered_df['Risk_Score'] > 75].shape[0]
+avg_burnout = filtered_df['Burnout'].mean()
+avg_justice = filtered_df['Justice'].mean()
 
-def kpi_card(title, value, delta, color="green"):
-    delta_cls = "neg" if color == "red" else ""
-    return f"""
-    <div class="kpi-card">
-        <div class="kpi-title">{title}</div>
-        <div class="kpi-value">{value}</div>
-        <div class="kpi-delta {delta_cls}">{delta}</div>
-    </div>
-    """
+col4.metric("میانگین ریسک خروج سازمان", f"{avg_risk:.1f}%", delta_color="inverse", delta=f"{avg_risk-50:.1f}")
+col3.metric("تعداد کارکنان در منطقه قرمز", f"{high_risk_count} نفر", delta_color="inverse", delta="خطرناک")
+col2.metric("میانگین فرسودگی شغلی", f"{avg_burnout:.1f} / 10", delta_color="inverse", delta=f"{avg_burnout-5:.1f}")
+col1.metric("ادراک عدالت سازمانی", f"{avg_justice:.1f} / 10", delta=f"{avg_justice-5:.1f}")
 
-with col1:
-    st.markdown(kpi_card("میانگین حقوق پرداختی", f"{avg_sal:,.1f} M", "تومان"), unsafe_allow_html=True)
-with col2:
-    color = "red" if avg_hours > 190 else "green"
-    st.markdown(kpi_card("میانگین ساعات کاری", f"{int(avg_hours)}", "ساعت/ماه", color), unsafe_allow_html=True)
-with col3:
-    st.markdown(kpi_card("پرسنل در خطر فرسودگی", f"{high_risk_burnout}", "نفر (نیاز به توجه)", "red"), unsafe_allow_html=True)
-with col4:
-    st.markdown(kpi_card("ریسک مهاجرت قطعی", f"{mig_risk_count}", "نیروی کلیدی", "red"), unsafe_allow_html=True)
+st.markdown("---")
 
-st.markdown("<br>", unsafe_allow_html=True)
+# --- بخش دوم: تحلیل ریشه‌ای (چرا افراد می‌روند؟) ---
+c1, c2 = st.columns([2, 1])
 
-# تب‌ها
-tab_risk, tab_survey, tab_ai = st.tabs(["⚠️ تحلیل ریسک و فرسودگی", "📊 تحلیل جمعیت‌شناسی", "🤖 توصیه‌های هوشمند (AI)"])
-
-# --- تب 1: تحلیل ریسک (تمرکز اصلی مدیران) ---
-with tab_risk:
-    r1, r2 = st.columns([2, 1])
+with c1:
+    st.subheader("📊 عوامل اصلی روانشناختی مؤثر بر خروج")
+    # استخراج اهمیت ویژگی‌ها از مدل
+    feature_importance = pd.DataFrame({
+        'Feature': ['تعهد عاطفی', 'عدالت سازمانی', 'رابطه با مدیر (LMX)', 'فرسودگی شغلی', 'تناسب شغل', 'سابقه کار'],
+        'Importance': model.feature_importances_
+    }).sort_values(by='Importance', ascending=True)
     
-    with r1:
-        st.subheader("رابطه فشار کاری و فرسودگی")
-        # نمودار Scatter
-        fig_burn = px.scatter(
-            df, x="MonthlyHours", y="Satisfaction",
-            color="BurnoutStatus",
-            size="Salary", # اندازه حباب = حقوق
-            hover_data=['ID', 'Department'],
-            color_discrete_map={'خطرناک': '#ef4444', 'هشدار': '#f59e0b', 'نرمال': '#10b981'},
-            labels={'MonthlyHours': 'ساعات کاری ماهانه', 'Satisfaction': 'رضایت شغلی (۱-۱۰)'},
-            title="تحلیل پراکندگی: ساعات کاری vs رضایت"
-        )
-        fig_burn.update_layout(font_family="Vazirmatn", plot_bgcolor="white", paper_bgcolor="white")
-        fig_burn.update_xaxes(showgrid=True, gridcolor='#f3f4f6')
-        fig_burn.update_yaxes(showgrid=True, gridcolor='#f3f4f6')
-        st.plotly_chart(fig_burn, use_container_width=True)
-        
-    with r2:
-        st.subheader("قابلیت جایگزینی پرسنل")
-        # نمودار دونات
-        fig_rep = px.pie(
-            df, names='Replaceability', 
-            hole=0.6,
-            color='Replaceability',
-            color_discrete_map={'سخت': '#ef4444', 'متوسط': '#f59e0b', 'آسان': '#10b981'}
-        )
-        fig_rep.update_layout(font_family="Vazirmatn", showlegend=False, 
-                              annotations=[dict(text=f'{len(df)}', x=0.5, y=0.5, font_size=20, showarrow=False)])
-        st.plotly_chart(fig_rep, use_container_width=True)
-        st.caption("تعداد کل پرسنل در مرکز نمودار")
+    fig_imp = px.bar(feature_importance, x='Importance', y='Feature', orientation='h', 
+                     title="وزن هر شاخص در تصمیم به خروج (بر اساس هوش مصنوعی)",
+                     color='Importance', color_continuous_scale='Redor')
+    st.plotly_chart(fig_imp, use_container_width=True)
 
-# --- تب 2: جمعیت شناسی ---
-with tab_survey:
-    d1, d2 = st.columns(2)
-    with d1:
-        st.subheader("توزیع حقوق در دپارتمان‌ها")
-        fig_box = px.box(
-            df, x="Department", y="Salary", color="Department",
-            title="پراکندگی حقوق (باکس‌پلات)"
-        )
-        fig_box.update_layout(font_family="Vazirmatn", showlegend=False, plot_bgcolor="white")
-        st.plotly_chart(fig_box, use_container_width=True)
-        
-    with d2:
-        st.subheader("هرم سابقه کار")
-        fig_hist = px.histogram(
-            df, x="Tenure", nbins=10, 
-            title="توزیع فراوانی سابقه کار پرسنل",
-            color_discrete_sequence=['#3b82f6']
-        )
-        fig_hist.update_layout(font_family="Vazirmatn", plot_bgcolor="white", bargap=0.1)
-        st.plotly_chart(fig_hist, use_container_width=True)
+with c2:
+    st.subheader("رادار سلامت روان تیم‌ها")
+    # آماده‌سازی داده برای نمودار رادار
+    radar_data = filtered_df.groupby('Department')[['Commitment', 'Justice', 'LMX_Manager_Rel', 'Job_Fit']].mean().reset_index()
+    # نرمالایز کردن معکوس برای فرسودگی (چون کمش خوبه)
+    radar_data['Burnout_Reverse'] = 10 - filtered_df.groupby('Department')['Burnout'].mean().values
+    
+    categories = ['تعهد', 'عدالت', 'رابطه با مدیر', 'تناسب شغل', 'عدم فرسودگی']
+    
+    fig_radar = go.Figure()
+    
+    for i, row in radar_data.iterrows():
+        fig_radar.add_trace(go.Scatterpolar(
+            r=[row['Commitment'], row['Justice'], row['LMX_Manager_Rel'], row['Job_Fit'], row['Burnout_Reverse']],
+            theta=categories,
+            fill='toself',
+            name=row['Department']
+        ))
+    
+    fig_radar.update_layout(
+        polar=dict(radialaxis=dict(visible=True, range=[0, 10])),
+        showlegend=True,
+        title="مقایسه دپارتمان‌ها"
+    )
+    st.plotly_chart(fig_radar, use_container_width=True)
 
-# --- تب 3: هوش مصنوعی (AI) ---
-with tab_ai:
-    # دکمه اجرای تحلیل
-    if st.button("🧠 بازخوانی و تحلیل داده‌ها توسط هوش مصنوعی", type="primary"):
-        with st.spinner("در حال پردازش الگوهای رفتاری و سازمانی..."):
-            time.sleep(2)
-            
-            # منطق تولید متن هوشمند
-            insights = []
-            
-            # تحلیل حقوق
-            if min_sal > 20000000:
-                insights.append(f"شما فیلتر حقوق را روی حداقل {min_sal:,.0f} تومان تنظیم کرده‌اید. در این سطح درآمدی، انتظار می‌رود 'رضایت شغلی' بالا باشد. اگر نمودارها رضایت پایین را نشان می‌دهند، مشکل **فرهنگ سازمانی** یا **مدیریت میکرومناجمنت** است، نه پول.")
-            
-            # تحلیل ساعات کاری
-            if avg_hours > 185:
-                insights.append(f"میانگین ساعات کاری ({int(avg_hours)} ساعت) بالاتر از استاندارد قانونی است. داده‌ها نشان می‌دهند {high_risk_burnout} نفر در وضعیت قرمز فرسودگی هستند. این زنگ خطری برای **افزایش خطاهای انسانی** و **سوانح کاری** است.")
-            
-            # تحلیل مهاجرت
-            if mig_risk_count > (len(df) * 0.2):
-                insights.append(f"بیش از ۲۰٪ نیروهای فیلتر شده ({mig_risk_count} نفر) پتانسیل بالای مهاجرت دارند. از آنجا که این افراد در بازه حقوقی انتخابی شما هستند، احتمالاً رقبای بین‌المللی با پیشنهاد **Work-Life Balance** بهتر آن‌ها را جذب می‌کنند.")
+# --- بخش سوم: لیست هشدار (Action List) ---
+st.subheader("🚨 لیست هشدار: کارکنان با احتمال خروج بالا")
+st.info("افراد زیر بر اساس ترکیب نمرات فرسودگی بالا، عدالت پایین و تعهد کم شناسایی شده‌اند.")
 
-            # تحلیل جایگزینی
-            hard_replace_perc = (len(df[df['Replaceability']=='سخت']) / len(df)) * 100
-            if hard_replace_perc > 30:
-                insights.append("سازمان وابستگی شدیدی به افراد قدیمی دارد. برنامه **جانشین‌پروری (Succession Planning)** باید فوراً برای پوزیشن‌های کلیدی اجرا شود.")
+high_risk_employees = filtered_df[filtered_df['Risk_Score'] > 70].sort_values('Risk_Score', ascending=False)
 
-            # نمایش
-            st.markdown(f"""
-            <div class="ai-insight-box">
-                <h3 style="color:#2563eb; display:flex; align-items:center;">
-                    <span style="font-size:1.5rem; margin-left:10px;">🤖</span> گزارش تحلیلی مدیر عامل
-                </h3>
-                <p style="color:#4b5563; font-size:0.95rem; line-height:1.8;">
-                    بر اساس فیلترهای اعمال شده (حقوق بالای {min_sal//1000000} میلیون و ساعات کاری {hours_range[0]}-{hours_range[1]}), هوش مصنوعی نکات زیر را استخراج کرد:
-                </p>
-                <ul style="color:#1f2937; font-weight:500; line-height:2;">
-                    {''.join([f'<li>{item}</li>' for item in insights])}
-                </ul>
-                <div style="margin-top:20px; padding:10px; background:#dbeafe; border-radius:8px; color:#1e40af; font-size:0.9rem;">
-                    <strong>💡 پیشنهاد استراتژیک:</strong> 
-                    {'کاهش فشار کاری و اضافه کار اجباری' if avg_hours > 180 else 'بازنگری در پکیج‌های نگهداشت (Retention)'} را در اولویت قرار دهید.
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-    else:
-        st.info("برای دریافت تحلیل جامع متنی، روی دکمه بالا کلیک کنید.")
+# اضافه کردن ستون "دلیل اصلی" به صورت متنی برای نمایش
+def identify_reason(row):
+    reasons = []
+    if row['Burnout'] > 7: reasons.append("فرسودگی شدید")
+    if row['Justice'] < 4: reasons.append("احساس بی‌عدالتی")
+    if row['LMX_Manager_Rel'] < 4: reasons.append("رابطه بد با مدیر")
+    if row['Commitment'] < 4: reasons.append("عدم تعهد")
+    return "، ".join(reasons) if reasons else "ریسک ترکیبی"
+
+high_risk_employees['Main_Risk_Factor'] = high_risk_employees.apply(identify_reason, axis=1)
+
+st.dataframe(
+    high_risk_employees[['ID', 'Department', 'Risk_Score', 'Main_Risk_Factor', 'Burnout', 'Justice', 'LMX_Manager_Rel']].style.background_gradient(subset=['Risk_Score'], cmap='Reds'),
+    use_container_width=True
+)
+
+# --- بخش چهارم: شبیه‌ساز پیشگیری (What-If Analysis) ---
+st.markdown("---")
+st.subheader("🛠️ شبیه‌ساز تصمیم‌گیری مدیریتی")
+st.markdown("اگر وضعیت شاخص‌های روانشناسی را بهبود دهید، نرخ ریزش چقدر کاهش می‌یابد؟")
+
+col_sim1, col_sim2, col_sim3 = st.columns(3)
+
+with col_sim1:
+    improve_justice = st.slider("افزایش احساس عدالت (%)", 0, 50, 0)
+with col_sim2:
+    reduce_burnout = st.slider("کاهش فرسودگی شغلی (%)", 0, 50, 0)
+with col_sim3:
+    improve_lmx = st.slider("بهبود رابطه با مدیران (%)", 0, 50, 0)
+
+# محاسبه تاثیر شبیه‌سازی
+current_high_risk_count = len(filtered_df[filtered_df['Risk_Score'] > 60])
+
+# کپی دیتافریم برای شبیه‌سازی
+sim_df = filtered_df.copy()
+
+# اعمال تغییرات
+sim_df['Justice'] = sim_df['Justice'] * (1 + improve_justice/100)
+sim_df['Burnout'] = sim_df['Burnout'] * (1 - reduce_burnout/100)
+sim_df['LMX_Manager_Rel'] = sim_df['LMX_Manager_Rel'] * (1 + improve_lmx/100)
+
+# محاسبه مجدد ریسک
+new_risk_score = (
+    (sim_df['Burnout'] * 1.5) + 
+    ((11 - sim_df['Justice']) * 1.2) + 
+    ((11 - sim_df['Commitment']) * 1.0) +
+    ((11 - sim_df['LMX_Manager_Rel']) * 0.8)
+)
+sim_df['New_Risk'] = ((new_risk_score - risk_score.min()) / (risk_score.max() - risk_score.min())) * 100
+
+new_high_risk_count = len(sim_df[sim_df['New_Risk'] > 60])
+saved_employees = current_high_risk_count - new_high_risk_count
+
+st.success(f"🎉 با اعمال این تغییرات، شما می‌توانید از خروج تقریبی **{saved_employees} نفر** جلوگیری کنید!")
+
+# نمودار مقایسه قبل و بعد
+fig_sim = go.Figure(data=[
+    go.Bar(name='وضعیت فعلی', x=['کارکنان در معرض ریسک'], y=[current_high_risk_count], marker_color='indianred'),
+    go.Bar(name='بعد از بهبود', x=['کارکنان در معرض ریسک'], y=[new_high_risk_count], marker_color='lightgreen')
+])
+fig_sim.update_layout(title="تأثیر مداخلات روانشناسی بر حفظ نیروی انسانی")
+st.plotly_chart(fig_sim, use_container_width=True)
