@@ -4,203 +4,255 @@ import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
 
-# --- 1. تنظیمات صفحه ---
+# --- 1. تنظیمات صفحه و تم ---
 st.set_page_config(
-    page_title="داشبورد تحلیل منابع انسانی",
-    page_icon="🏢",
-    layout="wide"
+    page_title="داشبورد منابع انسانی",
+    page_icon="👥",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# استایل برای راست‌چین کردن متون
+# --- 2. تزریق CSS حرفه‌ای (جادوی زیبایی) ---
 st.markdown("""
 <style>
-    .main, .stSidebar { direction: rtl; text-align: right; }
-    h1, h2, h3, h4, p, div, span { font-family: 'Tahoma', sans-serif; }
-    .stMetric { text-align: right; }
+    /* ایمپورت فونت وزیر */
+    @import url('https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css');
+    
+    * {
+        font-family: 'Vazirmatn', sans-serif !important;
+    }
+    
+    /* تنظیمات اصلی بدنه و راست‌چین */
+    .stApp {
+        background-color: #f8f9fa;
+    }
+    
+    .main .block-container {
+        direction: rtl;
+        padding-top: 2rem;
+    }
+    
+    /* استایل سایدبار */
+    section[data-testid="stSidebar"] {
+        background-color: #ffffff;
+        box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+    }
+    
+    /* کارت‌های متریک (KPI Cards) */
+    div[data-testid="metric-container"] {
+        background-color: #ffffff;
+        border: 1px solid #e0e0e0;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        transition: transform 0.2s;
+        text-align: right;
+    }
+    
+    div[data-testid="metric-container"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 12px rgba(0,0,0,0.1);
+        border-color: #4c6ef5;
+    }
+    
+    /* عناوین و متن‌ها */
+    h1, h2, h3 {
+        color: #2c3e50;
+        font-weight: 700;
+        text-align: right;
+    }
+    
+    /* تب‌ها */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 10px;
+        justify-content: flex-end;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: #ffffff;
+        border-radius: 5px;
+        color: #555;
+        font-size: 14px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background-color: #4c6ef5 !important;
+        color: white !important;
+    }
+
+    /* پنهان کردن منوی همبرگری پیش‌فرض برای ظاهر تمیزتر */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. تولید داده‌های ساختگی (Mock Data) ---
+# --- 3. تابع تولید داده (همان منطق قبلی) ---
 @st.cache_data
 def load_data():
-    # شبیه‌سازی دیتاست IBM HR Analytics
     np.random.seed(42)
     n_employees = 500
-    
-    departments = ['فروش', 'تحقیق و توسعه', 'منابع انسانی']
-    education_fields = ['پزشکی', 'علوم انسانی', 'فنی مهندسی', 'بازاریابی', 'سایر']
-    job_roles = ['مدیر فروش', 'محقق', 'تکنسین آزمایشگاه', 'مدیر تولید', 'نماینده فروش', 'مدیر منابع انسانی']
-    
     data = {
         'EmployeeID': range(1001, 1001 + n_employees),
         'Age': np.random.randint(22, 60, n_employees),
         'Gender': np.random.choice(['مرد', 'زن'], n_employees),
-        'Department': np.random.choice(departments, n_employees),
-        'EducationField': np.random.choice(education_fields, n_employees),
-        'JobRole': np.random.choice(job_roles, n_employees),
-        'MaritalStatus': np.random.choice(['مجرد', 'متحل', 'مطلقه'], n_employees),
-        'YearsAtCompany': np.random.randint(1, 40, n_employees),
-        'YearsSinceLastPromotion': np.random.randint(0, 15, n_employees),
-        'PerformanceRating': np.random.randint(1, 5, n_employees), # 1 (کم) تا 4 (عالی)
-        'YearsInCurrentRole': np.random.randint(1, 15, n_employees),
-        'MonthlyIncome': np.random.randint(3000, 20000, n_employees), # دلار
-        'Attrition': np.random.choice(['Yes', 'No'], n_employees, p=[0.16, 0.84]) # 16% نرخ ریزش
+        'Department': np.random.choice(['فروش', 'تحقیق و توسعه', 'منابع انسانی', 'IT', 'مالی'], n_employees),
+        'JobRole': np.random.choice(['مدیر', 'کارشناس ارشد', 'کارشناس', 'کارآموز'], n_employees),
+        'MonthlyIncome': np.random.randint(15, 120, n_employees) * 1000000, # تومان
+        'Attrition': np.random.choice(['بله', 'خیر'], n_employees, p=[0.16, 0.84]),
+        'PerformanceRating': np.random.randint(1, 6, n_employees),
+        'YearsAtCompany': np.random.randint(1, 20, n_employees)
     }
-    
     df = pd.DataFrame(data)
-    
-    # محاسبه ستون‌های محاسباتی طبق قوانین مخزن گیت‌هاب
-    # قانون ارتقا: اگر سال‌های پس از آخرین ارتقا >= 5 و عملکرد > 3 باشد (مثال)
-    df['DueForPromotion'] = np.where(
-        (df['YearsSinceLastPromotion'] >= 5) & (df['PerformanceRating'] >= 3), 
-        'Yes', 'No'
-    )
-    
-    # قانون تعدیل نیرو (Retrenchment) فرضی
-    df['OnRetrenchmentList'] = np.where(
-        (df['PerformanceRating'] <= 1) & (df['YearsAtCompany'] < 2),
-        'Yes', 'No'
-    )
-    
+    df['Status'] = np.where(df['Attrition'] == 'بله', 'ترک کار', 'فعال')
     return df
 
 df = load_data()
 
-# --- 3. سایدبار و فیلترها ---
-st.sidebar.header("🎛 فیلترهای سراسری")
-
-# فیلتر دپارتمان
-dept_filter = st.sidebar.multiselect(
-    "انتخاب دپارتمان:",
-    options=df['Department'].unique(),
-    default=df['Department'].unique()
-)
-
-# فیلتر جنسیت
-gender_filter = st.sidebar.multiselect(
-    "انتخاب جنسیت:",
-    options=df['Gender'].unique(),
-    default=df['Gender'].unique()
-)
+# --- 4. سایدبار حرفه‌ای ---
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=80)
+    st.title("پنل تنظیمات")
+    st.markdown("---")
+    
+    # فیلترها با استایل بهتر
+    st.subheader("📌 فیلترهای نمایش")
+    
+    selected_dept = st.multiselect(
+        "دپارتمان‌ها",
+        options=df['Department'].unique(),
+        default=df['Department'].unique(),
+        help="انتخاب یک یا چند دپارتمان"
+    )
+    
+    selected_gender = st.multiselect(
+        "جنسیت",
+        options=df['Gender'].unique(),
+        default=df['Gender'].unique()
+    )
+    
+    st.markdown("---")
+    st.info("💡 این داشبورد وضعیت منابع انسانی سازمان را بر اساس داده‌های سال ۱۴۰۳ نمایش می‌دهد.")
 
 # اعمال فیلتر
-df_selection = df.query("Department == @dept_filter & Gender == @gender_filter")
+df_filtered = df.query("Department == @selected_dept & Gender == @selected_gender")
 
-if df_selection.empty:
-    st.warning("داده‌ای با این فیلترها موجود نیست!")
-    st.stop()
+# --- 5. بدنه اصلی ---
 
-# --- 4. بدنه اصلی ---
-st.title("🏢 داشبورد تحلیلی منابع انسانی (HR)")
-st.markdown("تحلیل نیروی کار، نرخ ارتقا و ریزش نیرو بر اساس داده‌های سازمانی.")
+# هدر اصلی با طراحی متفاوت
+c1, c2 = st.columns([1, 4])
+with c2:
+    st.title("داشبورد جامع منابع انسانی")
+    st.markdown(f"🗓 **آخرین بروزرسانی:** {pd.Timestamp.now().strftime('%Y-%m-%d')}")
+with c1:
+    # نمایش تعداد کل به صورت خیلی بزرگ
+    st.markdown(
+        f"""
+        <div style="background-color:#4c6ef5; color:white; padding:10px; border-radius:10px; text-align:center;">
+            <div style="font-size:14px;">تعداد پرسنل</div>
+            <div style="font-size:32px; font-weight:bold;">{len(df_filtered)}</div>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
 
-# تب‌بندی مشابه پروژه اصلی
-tab1, tab2, tab3 = st.tabs(["📊 خلاصه مدیریتی", "🚀 ظرفیت و ارتقا", "⚠️ تحلیل ریزش (Attrition)"])
+st.markdown("<br>", unsafe_allow_html=True)
 
-# --- تب 1: خلاصه مدیریتی ---
+# متریک‌های کلیدی (KPIs)
+kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+
+avg_age = int(df_filtered['Age'].mean())
+avg_income = int(df_filtered['MonthlyIncome'].mean() / 1000000)
+attrition_rate = round((len(df_filtered[df_filtered['Attrition']=='بله']) / len(df_filtered)) * 100, 1)
+avg_perf = round(df_filtered['PerformanceRating'].mean(), 1)
+
+with kpi1:
+    st.metric("میانگین سنی", f"{avg_age} سال", delta_color="off")
+with kpi2:
+    st.metric("میانگین حقوق", f"{avg_income} م.تومان", delta_color="off")
+with kpi3:
+    st.metric("نرخ ریزش نیرو", f"{attrition_rate}%", "-2%" if attrition_rate < 15 else "+1%")
+with kpi4:
+    st.metric("میانگین عملکرد (۱-۵)", f"{avg_perf}", "خوب" if avg_perf > 3 else "نیاز به بهبود")
+
+st.markdown("---")
+
+# --- تب‌ها با محتوای بصری ---
+tab1, tab2 = st.tabs(["📊 تحلیل جمعیت‌شناسی", "⚠️ تحلیل ترک کار (Attrition)"])
+
+# تابع کمکی برای استایل دادن به نمودارها
+def beautify_plotly(fig):
+    fig.update_layout(
+        font_family="Vazirmatn",
+        title_font_family="Vazirmatn",
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color="#2c3e50"),
+        margin=dict(t=50, l=10, r=10, b=10)
+    )
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(showgrid=True, gridcolor='#eee')
+    return fig
+
 with tab1:
-    st.header("نمای کلی سازمان")
+    col_a, col_b = st.columns(2)
     
-    # KPI ها
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("تعداد کل کارکنان", df_selection.shape[0])
-    col2.metric("میانگین سنی", f"{int(df_selection['Age'].mean())} سال")
-    col3.metric("میانگین حقوق", f"${int(df_selection['MonthlyIncome'].mean()):,}")
-    col4.metric("نرخ ریزش کل", f"{round((df_selection[df_selection['Attrition']=='Yes'].shape[0] / df_selection.shape[0])*100, 1)}%")
-    
-    st.markdown("---")
-    
-    # نمودارهای سطر اول
-    c1, c2 = st.columns(2)
-    
-    with c1:
-        st.subheader("توزیع جنسیتی در دپارتمان‌ها")
-        fig_gender = px.histogram(
-            df_selection, x="Department", color="Gender", 
-            barmode="group", text_auto=True,
-            color_discrete_map={'مرد': '#636EFA', 'زن': '#EF553B'},
-            title="تعداد کارکنان به تفکیک دپارتمان و جنسیت"
+    with col_a:
+        st.subheader("توزیع پرسنل در دپارتمان‌ها")
+        fig_dept = px.bar(
+            df_filtered['Department'].value_counts().reset_index(),
+            x='Department', y='count',
+            color='count',
+            text_auto=True,
+            labels={'Department': 'دپارتمان', 'count': 'تعداد'},
+            color_continuous_scale="Blues"
         )
-        st.plotly_chart(fig_gender, use_container_width=True)
+        st.plotly_chart(beautify_plotly(fig_dept), use_container_width=True)
         
-    with c2:
-        st.subheader("توزیع سنی و تاهل")
-        fig_age = px.box(
-            df_selection, x="MaritalStatus", y="Age", color="MaritalStatus",
-            title="پراکندگی سنی بر اساس وضعیت تاهل"
+    with col_b:
+        st.subheader("ترکیب جنسیتی و نقش‌ها")
+        fig_sun = px.sunburst(
+            df_filtered, path=['Gender', 'JobRole'],
+            color_discrete_sequence=px.colors.qualitative.Pastel
         )
-        st.plotly_chart(fig_age, use_container_width=True)
+        st.plotly_chart(beautify_plotly(fig_sun), use_container_width=True)
 
-# --- تب 2: ظرفیت و ارتقا ---
+    st.subheader("روند حقوق و سابقه کار")
+    fig_scatter = px.scatter(
+        df_filtered, x="YearsAtCompany", y="MonthlyIncome",
+        size="PerformanceRating", color="Department",
+        hover_data=['JobRole'],
+        labels={'YearsAtCompany': 'سابقه کار (سال)', 'MonthlyIncome': 'حقوق ماهیانه'},
+        color_discrete_sequence=px.colors.qualitative.G10
+    )
+    st.plotly_chart(beautify_plotly(fig_scatter), use_container_width=True)
+
 with tab2:
-    st.header("تحلیل ارتقا شغلی و تعدیل")
+    col_c, col_d = st.columns([2, 1])
     
-    # محاسبه متریک‌های این بخش
-    promo_count = df_selection[df_selection['DueForPromotion'] == 'Yes'].shape[0]
-    retrench_count = df_selection[df_selection['OnRetrenchmentList'] == 'Yes'].shape[0]
-    
-    kpi1, kpi2 = st.columns(2)
-    kpi1.metric("کاندیدای ارتقا شغلی (واجد شرایط)", promo_count, delta="نیاز به اقدام", delta_color="normal")
-    kpi2.metric("لیست بررسی تعدیل (عملکرد پایین)", retrench_count, delta="خطر", delta_color="inverse")
-    
-    st.markdown("---")
-    
-    c1, c2 = st.columns(2)
-    
-    with c1:
-        # نمودار دایره‌ای کاندیدای ارتقا
-        df_promo = df_selection.groupby('DueForPromotion').size().reset_index(name='Count')
-        fig_promo = px.pie(
-            df_promo, values='Count', names='DueForPromotion', 
-            title="درصد کارکنان واجد شرایط ارتقا",
-            color='DueForPromotion',
-            color_discrete_map={'Yes': '#00CC96', 'No': '#EF553B'}
-        )
-        st.plotly_chart(fig_promo, use_container_width=True)
+    with col_c:
+        st.subheader("چه کسانی سازمان را ترک می‌کنند؟")
+        attrition_data = df_filtered[df_filtered['Attrition'] == 'بله']
         
-    with c2:
-        # نمودار میله‌ای عملکرد بر اساس سال‌های حضور
-        fig_perf = px.scatter(
-            df_selection, x="YearsSinceLastPromotion", y="PerformanceRating",
-            color="Department", size="MonthlyIncome",
-            title="رابطه آخرین ارتقا و عملکرد (حباب = درآمد)"
-        )
-        st.plotly_chart(fig_perf, use_container_width=True)
-
-# --- تب 3: تحلیل ریزش نیرو ---
-with tab3:
-    st.header("عوامل ترک سازمان")
-    
-    # فیلتر کردن فقط کسانی که رفته‌اند
-    attrition_df = df_selection[df_selection['Attrition'] == 'Yes']
-    
-    if attrition_df.empty:
-        st.success("هیچ ریزش نیرویی با فیلترهای فعلی یافت نشد!")
-    else:
-        st.markdown("تحلیل ویژگی‌های کارکنانی که سازمان را ترک کرده‌اند.")
-        
-        row1_1, row1_2 = st.columns(2)
-        
-        with row1_1:
-            fig_att_dept = px.histogram(
-                attrition_df, y="Department", x="Age", color="Gender",
-                title="ریزش بر اساس دپارتمان و سن"
+        if attrition_data.empty:
+            st.success("هیچ داده‌ای برای نمایش وجود ندارد.")
+        else:
+            fig_att = px.histogram(
+                attrition_data, x="Department", color="JobRole",
+                barmode="group",
+                color_discrete_sequence=px.colors.qualitative.Set2,
+                labels={'Department': 'دپارتمان', 'count': 'تعداد خروج'}
             )
-            st.plotly_chart(fig_att_dept, use_container_width=True)
-            
-        with row1_2:
-            fig_att_role = px.bar(
-                attrition_df.groupby('JobRole').size().reset_index(name='Count'),
-                x='Count', y='JobRole', orientation='h',
-                title="کدام نقش‌های شغلی بیشترین ریزش را دارند؟"
-            )
-            st.plotly_chart(fig_att_role, use_container_width=True)
-            
-        # هیت‌مپ همبستگی (ساده شده)
-        st.subheader("توزیع درآمد و سابقه کار در افراد جدا شده")
-        fig_scatter_att = px.scatter(
-            attrition_df, x="YearsAtCompany", y="MonthlyIncome",
-            color="EducationField",
-            title="درآمد در مقابل سابقه کار (افراد جدا شده)"
+            st.plotly_chart(beautify_plotly(fig_att), use_container_width=True)
+    
+    with col_d:
+        st.subheader("وضعیت کلی ریزش")
+        fig_donut = px.pie(
+            df_filtered, names='Attrition',
+            hole=0.6,
+            color_discrete_map={'بله': '#ff6b6b', 'خیر': '#51cf66'}
         )
-        st.plotly_chart(fig_scatter_att, use_container_width=True)
+        st.plotly_chart(beautify_plotly(fig_donut), use_container_width=True)
